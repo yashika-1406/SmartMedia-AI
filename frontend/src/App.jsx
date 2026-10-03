@@ -1,16 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
 import Dashboard from './pages/Dashboard';
 import Upload from './pages/Upload';
 import Library from './pages/Library';
 import MediaDetails from './pages/MediaDetails';
+import { getMedia } from './services/api';
 import './App.css';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedMediaId, setSelectedMediaId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [totalAssets, setTotalAssets] = useState(0);
+
+  const fetchAssetCount = async () => {
+    try {
+      const data = await getMedia();
+      if (data && Array.isArray(data.media)) {
+        setTotalAssets(data.media.length);
+      }
+    } catch (err) {
+      // Non-fatal
+    }
+  };
+
+  useEffect(() => {
+    fetchAssetCount();
+  }, [activeTab]);
 
   const handleSelectMedia = (id) => {
     setSelectedMediaId(id);
@@ -23,7 +40,7 @@ export default function App() {
 
   const handleSearchSubmit = (q) => {
     if (q) {
-      setActiveTab('search');
+      setActiveTab('library');
     }
   };
 
@@ -38,6 +55,7 @@ export default function App() {
           }
           setActiveTab(tab);
         }}
+        totalAssets={totalAssets}
       />
 
       {/* 2. Main Wrapper */}
@@ -62,58 +80,17 @@ export default function App() {
 
           {activeTab === 'library' && (
             <Library
-              onSelectMedia={handleSelectMedia}
-              onNavigateToUpload={() => setActiveTab('upload')}
-            />
-          )}
-
-          {activeTab === 'search' && (
-            <Library
               initialQuery={searchQuery}
               onSelectMedia={handleSelectMedia}
               onNavigateToUpload={() => setActiveTab('upload')}
             />
           )}
 
-          {activeTab === 'transformations' && (
+          {activeTab === 'studio' && (
             <Dashboard
               onNavigateToUpload={() => setActiveTab('upload')}
               onNavigateToLibrary={() => setActiveTab('library')}
             />
-          )}
-
-          {activeTab === 'video' && (
-            <Library
-              initialQuery="video"
-              onSelectMedia={handleSelectMedia}
-              onNavigateToUpload={() => setActiveTab('upload')}
-            />
-          )}
-
-          {activeTab === 'analytics' && (
-            <Dashboard
-              onNavigateToUpload={() => setActiveTab('upload')}
-              onNavigateToLibrary={() => setActiveTab('library')}
-            />
-          )}
-
-          {activeTab === 'settings' && (
-            <div style={{ padding: '40px 32px' }}>
-              <div className="glass-panel" style={{ padding: '32px' }}>
-                <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '16px' }}>
-                  SmartMedia AI Environment Settings
-                </h2>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
-                  Backend connected to Cloudinary API and MongoDB Atlas.
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px' }}>
-                  <div><strong>Live Backend:</strong> https://smartmedia-ai.onrender.com/api</div>
-                  <div><strong>Cloudinary Cloud:</strong> lj3aht9j</div>
-                  <div><strong>Database:</strong> MongoDB Atlas (Connected)</div>
-                  <div><strong>Version:</strong> SmartMedia AI v1.0.0 (HackIndia 2026)</div>
-                </div>
-              </div>
-            </div>
           )}
 
           {activeTab === 'details' && (

@@ -177,5 +177,15 @@ export const transformMedia = async (id, { preset = 'square', removeBackground =
   return response.data;
 };
 
+/**
+ * Delete a media asset from MongoDB Atlas and Cloudinary
+ * @param {string} id - MongoDB ObjectId
+ * @returns {Promise<{ success: boolean, message: string }>}
+ */
+export const deleteMedia = async (id) => {
+  const response = await api.delete(`/media/${id}`);
+  return response.data;
+};
+
 export default api;
 

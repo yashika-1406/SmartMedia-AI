@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Bell } from 'lucide-react';
+import { Search, ShieldCheck } from 'lucide-react';
 
 export default function Header({ searchQuery, onSearchChange, onSearchSubmit }) {
   const handleKeyDown = (e) => {
@@ -14,7 +14,7 @@ export default function Header({ searchQuery, onSearchChange, onSearchSubmit }) 
         <Search className="search-icon-left" />
         <input
           type="text"
-          placeholder="Search media, tags, people, or anything..."
+          placeholder="Search media by tags, filename, format..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -23,21 +23,11 @@ export default function Header({ searchQuery, onSearchChange, onSearchSubmit }) 
       </div>
 
       <div className="header-actions">
-        <button className="notification-btn" aria-label="Notifications">
-          <Bell size={18} />
-          <span className="notification-badge"></span>
-        </button>
-
-        <div className="user-profile">
-          <img
-            src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80"
-            alt="Sarah Chen"
-            className="user-avatar"
-          />
-          <div className="user-details">
-            <h4>Sarah Chen</h4>
-            <span>Pro Plan</span>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 14px', borderRadius: '9999px', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
+          <ShieldCheck size={14} style={{ color: '#818CF8' }} />
+          <span style={{ fontSize: '12px', fontWeight: 600, color: '#C7D2FE' }}>
+            HackIndia 2026 Cloudinary Track
+          </span>
         </div>
       </div>
     </header>

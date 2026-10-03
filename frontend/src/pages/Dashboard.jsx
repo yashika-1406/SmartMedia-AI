@@ -6,40 +6,33 @@ import MediaLibrarySection from '../components/dashboard/MediaLibrarySection';
 import AiSearchSection from '../components/dashboard/AiSearchSection';
 import AiAnalysisPanel from '../components/dashboard/AiAnalysisPanel';
 import TransformationStudioPanel from '../components/dashboard/TransformationStudioPanel';
-import { getMedia } from '../services/api';
+import { getMedia, deleteMedia } from '../services/api';
 
 export default function Dashboard({ onNavigateToUpload, onNavigateToLibrary }) {
   const [mediaList, setMediaList] = useState([]);
   const [selectedMedia, setSelectedMedia] = useState(null);
-  const [stats, setStats] = useState({
-    total: 1248,
-    analyzed: 892,
-    approved: 860,
-    videos: 124,
-  });
+  const [isLoading, setIsLoading] = useState(true);
 
   const loadMedia = async () => {
     try {
+      setIsLoading(true);
       const data = await getMedia();
-      if (data && data.media && data.media.length > 0) {
+      if (data && Array.isArray(data.media)) {
         setMediaList(data.media);
-        setSelectedMedia(data.media[0]);
-
-        // Calculate dynamic metrics
-        const total = data.total || data.media.length;
-        const analyzed = data.media.filter((m) => m.tags && m.tags.length > 0).length;
-        const approved = data.media.filter((m) => m.moderationStatus === 'approved').length;
-        const videos = data.media.filter((m) => m.resourceType === 'video').length;
-
-        setStats({
-          total: total > 10 ? total : 1248,
-          analyzed: analyzed > 0 ? analyzed + 890 : 892,
-          approved: approved > 0 ? approved + 850 : 860,
-          videos: videos > 0 ? videos + 120 : 124,
-        });
+        if (data.media.length > 0) {
+          // Keep current selected media if still exists, otherwise select first
+          setSelectedMedia((prev) => {
+            const found = prev ? data.media.find((m) => m._id === prev._id) : null;
+            return found || data.media[0];
+          });
+        } else {
+          setSelectedMedia(null);
+        }
       }
     } catch (err) {
-      console.warn('Backend load deferred to local showcase assets:', err.message);
+      console.warn('Media list load notice:', err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -47,12 +40,20 @@ export default function Dashboard({ onNavigateToUpload, onNavigateToLibrary }) {
     loadMedia();
   }, []);
 
-  const handleUploadSuccess = (uploadedItem) => {
-    if (uploadedItem) {
+  const handleUploadSuccess = (uploadedResult) => {
+    loadMedia();
+    if (uploadedResult && uploadedResult.media) {
+      setSelectedMedia(uploadedResult.media);
+    }
+  };
+
+  const handleDeleteMedia = async (id) => {
+    try {
+      await deleteMedia(id);
       loadMedia();
-      if (uploadedItem.media) {
-        setSelectedMedia(uploadedItem.media);
-      }
+    } catch (err) {
+      console.error('Delete failed:', err);
+      alert('Delete failed: ' + (err.message || 'Unknown error'));
     }
   };
 
@@ -61,39 +62,39 @@ export default function Dashboard({ onNavigateToUpload, onNavigateToLibrary }) {
       {/* 1. Hero Banner with Parallax */}
       <HeroBanner onUploadClick={onNavigateToUpload} />
 
-      {/* 2. KPI Metrics Cards */}
-      <MetricsRow stats={stats} />
+      {/* 2. 100% Real KPI Metrics calculated from Database assets */}
+      <MetricsRow mediaList={mediaList} />
 
       {/* 3. Main Split Grid */}
       <div className="dashboard-grid">
         {/* Left Broad Workspace Column */}
         <div className="workspace-column">
-          {/* Drag & Drop Ingestion Zone */}
+          {/* Real Ingestion Dropzone */}
           <IngestionDropZone onUploadSuccess={handleUploadSuccess} />
 
-          {/* Media Library Interactive Grid */}
+          {/* Real Media Library Section */}
           <MediaLibrarySection
             mediaList={mediaList}
             selectedMedia={selectedMedia}
             onSelectMedia={(item) => setSelectedMedia(item)}
+            onDeleteMedia={handleDeleteMedia}
             onViewAll={onNavigateToLibrary}
           />
 
-          {/* AI Search & Natural Language Query */}
-          <AiSearchSection onSelectMedia={(item) => setSelectedMedia(item)} />
+          {/* Real Dynamic AI Search Section */}
+          <AiSearchSection
+            mediaList={mediaList}
+            onSelectMedia={(item) => setSelectedMedia(item)}
+          />
         </div>
 
         {/* Right Inspector & Transformation Studio Column */}
         <div className="inspector-column">
           <AiAnalysisPanel
             selectedMedia={selectedMedia}
-            onAddTag={(tag) => {
-              if (selectedMedia) {
-                const newTags = Array.isArray(selectedMedia.tags)
-                  ? [...selectedMedia.tags, tag]
-                  : [tag];
-                setSelectedMedia({ ...selectedMedia, tags: newTags });
-              }
+            onUpdateMedia={(updated) => {
+              setSelectedMedia(updated);
+              loadMedia();
             }}
           />
 

@@ -2,12 +2,12 @@ import React, { useState, useRef } from 'react';
 import {
   UploadCloud,
   Image as ImageIcon,
-  Video as VideoIcon,
-  Music,
-  FileText,
-  Loader2,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Loader2,
+  Cpu,
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 import { uploadImage } from '../../services/api';
 
@@ -43,6 +43,16 @@ export default function IngestionDropZone({ onUploadSuccess }) {
   };
 
   const processFile = async (file) => {
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('Please select a valid image file (JPEG, PNG, WebP, GIF, SVG).');
+      return;
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      setErrorMessage('File size exceeds the 15 MB limit.');
+      return;
+    }
+
     setIsUploading(true);
     setUploadProgress(0);
     setErrorMessage(null);
@@ -53,17 +63,18 @@ export default function IngestionDropZone({ onUploadSuccess }) {
         setUploadProgress(percent);
       });
 
-      setStatusMessage(`Upload completed! Media indexed.`);
+      setStatusMessage('Upload successful! Asset indexed with AI tags.');
       if (onUploadSuccess) {
         onUploadSuccess(result);
       }
       setTimeout(() => {
         setIsUploading(false);
         setStatusMessage(null);
-      }, 2500);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }, 2000);
     } catch (err) {
       console.error('Upload failed:', err);
-      setErrorMessage(err.message || 'Upload failed. Check backend connection.');
+      setErrorMessage(err.message || 'Upload failed. Please check network connection.');
       setIsUploading(false);
     }
   };
@@ -80,7 +91,7 @@ export default function IngestionDropZone({ onUploadSuccess }) {
         ref={fileInputRef}
         style={{ display: 'none' }}
         onChange={handleFileChange}
-        accept="image/*,video/*"
+        accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
       />
 
       <div className="drop-area-left">
@@ -94,14 +105,14 @@ export default function IngestionDropZone({ onUploadSuccess }) {
 
         <h4>
           {isUploading
-            ? `Uploading Media (${uploadProgress}%)`
-            : 'Drag & drop your media here'}
+            ? `Streaming to Cloudinary (${uploadProgress}%)`
+            : 'Drag & drop image here to upload'}
         </h4>
 
-        <p>Supports images, videos, audio and documents</p>
+        <p>Direct in-memory buffer streaming — zero local disk accumulation</p>
 
         {isUploading ? (
-          <div style={{ width: '220px', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden', marginTop: '8px' }}>
+          <div style={{ width: '240px', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden', marginTop: '8px' }}>
             <div
               style={{
                 width: `${uploadProgress}%`,
@@ -116,19 +127,19 @@ export default function IngestionDropZone({ onUploadSuccess }) {
             className="btn-choose-files"
             onClick={() => fileInputRef.current?.click()}
           >
-            Choose Files
+            Choose Image File
           </button>
         )}
 
         {statusMessage && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10B981', fontSize: '11px', marginTop: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10B981', fontSize: '11px', marginTop: '8px' }}>
             <CheckCircle2 size={13} />
             <span>{statusMessage}</span>
           </div>
         )}
 
         {errorMessage && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#F43F5E', fontSize: '11px', marginTop: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#F43F5E', fontSize: '11px', marginTop: '8px' }}>
             <AlertCircle size={13} />
             <span>{errorMessage}</span>
           </div>
@@ -141,38 +152,38 @@ export default function IngestionDropZone({ onUploadSuccess }) {
             <ImageIcon size={15} />
           </div>
           <div className="format-meta">
-            <h5>Images</h5>
-            <p>JPG, PNG, WebP (Max 50MB)</p>
+            <h5>Formats</h5>
+            <p>JPEG, PNG, WebP, GIF, SVG</p>
           </div>
         </div>
 
         <div className="format-spec-row">
           <div className="format-icon-pill" style={{ color: '#818CF8' }}>
-            <VideoIcon size={15} />
+            <Zap size={15} />
           </div>
           <div className="format-meta">
-            <h5>Videos</h5>
-            <p>MP4, MOV, AVI (Max 5GB)</p>
+            <h5>Max File Size</h5>
+            <p>15 MB per image</p>
           </div>
         </div>
 
         <div className="format-spec-row">
           <div className="format-icon-pill" style={{ color: '#C084FC' }}>
-            <Music size={15} />
+            <Cpu size={15} />
           </div>
           <div className="format-meta">
-            <h5>Audio</h5>
-            <p>MP3, WAV, M4A (Max 1GB)</p>
+            <h5>AI Auto-Tagging</h5>
+            <p>Computer Vision extraction</p>
           </div>
         </div>
 
         <div className="format-spec-row">
-          <div className="format-icon-pill" style={{ color: '#F472B6' }}>
-            <FileText size={15} />
+          <div className="format-icon-pill" style={{ color: '#10B981' }}>
+            <ShieldCheck size={15} />
           </div>
           <div className="format-meta">
-            <h5>Documents</h5>
-            <p>PDF, TXT (Max 100MB)</p>
+            <h5>Moderation</h5>
+            <p>Automated safety screening</p>
           </div>
         </div>
       </div>

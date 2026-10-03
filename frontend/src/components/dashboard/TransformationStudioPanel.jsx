@@ -1,80 +1,71 @@
 import React, { useState } from 'react';
 import {
   Crop,
-  Layers,
   Gauge,
   Eraser,
   Wand2,
-  ChevronRight,
   Copy,
   Check,
   ExternalLink,
-  Loader2
+  Loader2,
+  Columns
 } from 'lucide-react';
 import { getSmartCrop, removeBackground, transformMedia } from '../../services/api';
 
 export default function TransformationStudioPanel({ selectedMedia }) {
   const [activeTab, setActiveTab] = useState('crop');
-  const [selectedRatio, setSelectedRatio] = useState('16:9');
+  const [selectedPreset, setSelectedPreset] = useState('landscape');
   const [isTransforming, setIsTransforming] = useState(false);
   const [transformedResult, setTransformedResult] = useState(null);
+  const [centerCropUrl, setCenterCropUrl] = useState(null);
+  const [showComparison, setShowComparison] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [errorNotice, setErrorNotice] = useState(null);
 
-  // Fallback image matching mockup
-  const currentAsset = selectedMedia || {
-    _id: 'sample-asset',
-    publicId: 'smartmedia/uploads/dog_glasses',
-    secureUrl: 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=600&q=80',
-  };
-
-  const transformTabs = [
-    { id: 'crop', label: 'Smart Crop', icon: Crop },
-    { id: 'bg', label: 'Remove Background', icon: Eraser },
-    { id: 'optimize', label: 'Optimize for Web', icon: Gauge },
-    { id: 'variants', label: 'Generate Variants', icon: Layers },
+  const presets = [
+    { id: 'square', ratio: '1:1', label: 'Square (800x800)', desc: 'Avatar & Social Feed' },
+    { id: 'portrait', ratio: '4:5', label: 'Portrait (800x1000)', desc: 'Editorial Post' },
+    { id: 'story', ratio: '9:16', label: 'Story (720x1280)', desc: 'Mobile Story' },
+    { id: 'landscape', ratio: '16:9', label: 'Landscape (1280x720)', desc: 'Desktop Header' },
+    { id: 'thumbnail', ratio: '1:1', label: 'Thumbnail (400x400)', desc: 'Compact Preview' },
   ];
 
-  const aspectRatios = [
-    { id: '1:1', ratio: '1:1', label: 'Square', preset: 'square', inset: '10% 25%' },
-    { id: '16:9', ratio: '16:9', label: 'Widescreen', preset: 'landscape', inset: '25% 10%' },
-    { id: '4:5', ratio: '4:5', label: 'Portrait', preset: 'portrait', inset: '10% 20%' },
-    { id: '9:16', ratio: '9:16', label: 'Social', preset: 'story', inset: '5% 35%' },
-  ];
-
-  const currentRatioObj = aspectRatios.find((r) => r.id === selectedRatio) || aspectRatios[1];
+  if (!selectedMedia) {
+    return (
+      <div className="panel-card" style={{ textAlign: 'center', padding: '36px 20px' }}>
+        <Crop size={28} style={{ color: 'var(--text-muted)', margin: '0 auto 12px' }} />
+        <h4 style={{ fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>No Asset Selected</h4>
+        <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+          Select an image from the Media Library to generate AI Smart Crops or remove backgrounds.
+        </p>
+      </div>
+    );
+  }
 
   const handleApplyTransformation = async () => {
     setIsTransforming(true);
     setTransformedResult(null);
+    setCenterCropUrl(null);
+    setErrorNotice(null);
 
     try {
-      if (selectedMedia && selectedMedia._id && !selectedMedia._id.startsWith('sample')) {
-        let resultUrl = '';
-        if (activeTab === 'crop') {
-          const res = await getSmartCrop(selectedMedia._id, currentRatioObj.preset);
-          resultUrl = res.url;
-        } else if (activeTab === 'bg') {
-          const res = await removeBackground(selectedMedia._id);
-          resultUrl = res.backgroundRemovedUrl;
-        } else {
-          const res = await transformMedia(selectedMedia._id, {
-            preset: currentRatioObj.preset,
-            removeBackground: activeTab === 'bg',
-          });
-          resultUrl = res.transformedUrl;
-        }
-        setTransformedResult(resultUrl);
+      if (activeTab === 'crop') {
+        const res = await getSmartCrop(selectedMedia._id, selectedPreset);
+        setTransformedResult(res.url);
+        setCenterCropUrl(res.centerCropUrl);
+      } else if (activeTab === 'bg') {
+        const res = await removeBackground(selectedMedia._id);
+        setTransformedResult(res.backgroundRemovedUrl);
       } else {
-        // High quality preview simulation if using sample asset
-        const simulatedUrl =
-          activeTab === 'bg'
-            ? 'https://res.cloudinary.com/demo/image/upload/e_background_removal/q_auto/docs/camera.png'
-            : `https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=800&q=80`;
-        setTransformedResult(simulatedUrl);
+        const res = await transformMedia(selectedMedia._id, {
+          preset: selectedPreset,
+          removeBackground: false,
+        });
+        setTransformedResult(res.transformedUrl);
       }
     } catch (err) {
-      console.warn('Transformation failed on live API, falling back to dynamic URL:', err.message);
-      setTransformedResult(currentAsset.secureUrl);
+      console.warn('Transformation error:', err.message);
+      setErrorNotice(err.message || 'Transformation failed');
     } finally {
       setIsTransforming(false);
     }
@@ -87,6 +78,10 @@ export default function TransformationStudioPanel({ selectedMedia }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const displayedImage = showComparison && centerCropUrl
+    ? centerCropUrl
+    : transformedResult || selectedMedia.secureUrl;
+
   return (
     <div className="panel-card">
       <div className="panel-header">
@@ -94,62 +89,79 @@ export default function TransformationStudioPanel({ selectedMedia }) {
           <Wand2 size={16} style={{ color: 'var(--accent-purple)' }} />
           <span>Transformation Studio</span>
         </h3>
-        <button className="btn-view-all">
-          <span>View All</span>
-          <ChevronRight size={12} />
+      </div>
+
+      {/* 3 Real Supported Action Modes */}
+      <div className="transform-tabs-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+        <button
+          onClick={() => { setActiveTab('crop'); setTransformedResult(null); }}
+          className={`transform-tab-btn ${activeTab === 'crop' ? 'active' : ''}`}
+        >
+          <Crop size={16} />
+          <span>Smart Crop</span>
+        </button>
+
+        <button
+          onClick={() => { setActiveTab('bg'); setTransformedResult(null); }}
+          className={`transform-tab-btn ${activeTab === 'bg' ? 'active' : ''}`}
+        >
+          <Eraser size={16} />
+          <span>Remove BG</span>
+        </button>
+
+        <button
+          onClick={() => { setActiveTab('optimize'); setTransformedResult(null); }}
+          className={`transform-tab-btn ${activeTab === 'optimize' ? 'active' : ''}`}
+        >
+          <Gauge size={16} />
+          <span>Optimize</span>
         </button>
       </div>
 
-      <div className="transform-tabs-grid">
-        {transformTabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`transform-tab-btn ${isActive ? 'active' : ''}`}
-            >
-              <Icon size={18} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Live Crop Canvas with Crop Handles */}
+      {/* Live Preview Display */}
       <div className="crop-canvas-box">
         <img
-          src={transformedResult || currentAsset.secureUrl}
-          alt="Transformation Canvas"
+          src={displayedImage}
+          alt="Transformation Result"
         />
 
-        {activeTab === 'crop' && !transformedResult && (
-          <div
-            className="crop-boundary-overlay"
-            style={{ inset: currentRatioObj.inset }}
-          >
-            <div className="crop-handle tl"></div>
-            <div className="crop-handle tr"></div>
-            <div className="crop-handle bl"></div>
-            <div className="crop-handle br"></div>
+        {showComparison && (
+          <div style={{ position: 'absolute', top: '8px', left: '8px', background: 'rgba(0,0,0,0.7)', padding: '3px 8px', borderRadius: '4px', fontSize: '10px', color: '#F8FAFC' }}>
+            Viewing: Standard Center Crop (g_center)
           </div>
         )}
       </div>
 
-      {/* Aspect Ratio Selector Pills */}
-      <div className="aspect-ratios-row">
-        {aspectRatios.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setSelectedRatio(item.id)}
-            className={`aspect-pill-btn ${selectedRatio === item.id ? 'active' : ''}`}
-          >
-            <span className="ratio-num">{item.ratio}</span>
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </div>
+      {/* Real Aspect Ratio Presets (for Crop & Optimize modes) */}
+      {activeTab !== 'bg' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Aspect Ratio Presets:</span>
+          <div className="aspect-ratios-row">
+            {presets.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setSelectedPreset(item.id)}
+                className={`aspect-pill-btn ${selectedPreset === item.id ? 'active' : ''}`}
+                title={item.desc}
+              >
+                <span className="ratio-num">{item.ratio}</span>
+                <span>{item.id}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Compare button if crop returned center comparison */}
+      {centerCropUrl && (
+        <button
+          onClick={() => setShowComparison(!showComparison)}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '11px', color: 'var(--accent-indigo)', padding: '6px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: '6px' }}
+        >
+          <Columns size={13} />
+          <span>{showComparison ? 'Switch to AI Smart Crop (g_auto)' : 'Compare with Center Crop (g_center)'}</span>
+        </button>
+      )}
 
       <button
         className="btn-apply-transform"
@@ -159,19 +171,31 @@ export default function TransformationStudioPanel({ selectedMedia }) {
         {isTransforming ? (
           <>
             <Loader2 size={16} className="animate-spin" />
-            <span>Processing with Cloudinary AI...</span>
+            <span>Processing with Cloudinary...</span>
           </>
         ) : (
           <>
             <Wand2 size={16} />
-            <span>Apply Transformation</span>
+            <span>
+              {activeTab === 'crop'
+                ? `Generate ${selectedPreset.toUpperCase()} Smart Crop`
+                : activeTab === 'bg'
+                ? 'Remove Background (AI)'
+                : 'Apply Web Optimization'}
+            </span>
           </>
         )}
       </button>
 
+      {errorNotice && (
+        <div style={{ fontSize: '11px', color: '#F43F5E', background: 'rgba(244, 63, 94, 0.1)', padding: '6px 10px', borderRadius: '6px' }}>
+          {errorNotice}
+        </div>
+      )}
+
       {transformedResult && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '8px', fontSize: '11px' }}>
-          <span style={{ color: '#10B981', fontWeight: 600 }}>Optimized URL ready</span>
+          <span style={{ color: '#10B981', fontWeight: 600 }}>Delivery URL generated</span>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button onClick={copyToClipboard} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-secondary)' }}>
               {copied ? <Check size={12} color="#10B981" /> : <Copy size={12} />}

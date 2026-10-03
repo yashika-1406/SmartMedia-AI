@@ -1,57 +1,62 @@
 import React from 'react';
-import { Clock, Cpu, CheckCircle2, Video, TrendingUp } from 'lucide-react';
+import { Images, Cpu, ShieldCheck, HardDrive } from 'lucide-react';
 
-export default function MetricsRow({ stats }) {
-  const defaultMetrics = [
+export default function MetricsRow({ mediaList = [] }) {
+  const total = mediaList.length;
+  const tagged = mediaList.filter((m) => m.tags && (Array.isArray(m.tags) ? m.tags.length > 0 : m.tags.trim().length > 0)).length;
+  const approved = mediaList.filter((m) => (m.moderationStatus || '').toLowerCase() === 'approved').length;
+  const totalBytes = mediaList.reduce((acc, m) => acc + (Number(m.bytes) || 0), 0);
+
+  const formatStorage = (bytes) => {
+    if (bytes === 0) return '0 KB';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const metrics = [
     {
       id: 'total',
-      label: 'Total Assets',
-      value: stats?.total ? stats.total.toLocaleString() : '1,248',
-      trend: '+12%',
+      label: 'Total Uploads',
+      value: total,
+      subtext: 'Persisted in MongoDB',
       colorBg: 'rgba(139, 92, 246, 0.15)',
       colorIcon: '#A78BFA',
-      icon: Clock,
-      bars: [30, 45, 35, 60, 50, 75, 90],
-      barColor: '#A78BFA',
+      icon: Images,
     },
     {
-      id: 'analyzed',
-      label: 'AI Analyzed',
-      value: stats?.analyzed ? stats.analyzed.toLocaleString() : '892',
-      trend: '+18%',
+      id: 'tagged',
+      label: 'AI Analyzed & Tagged',
+      value: tagged,
+      subtext: `${total > 0 ? Math.round((tagged / total) * 100) : 0}% coverage`,
       colorBg: 'rgba(59, 130, 246, 0.15)',
       colorIcon: '#60A5FA',
       icon: Cpu,
-      bars: [25, 40, 55, 45, 70, 80, 95],
-      barColor: '#60A5FA',
     },
     {
       id: 'approved',
-      label: 'Approved',
-      value: stats?.approved ? stats.approved.toLocaleString() : '860',
-      trend: '+14%',
+      label: 'Moderation Approved',
+      value: approved,
+      subtext: `${total > 0 ? Math.round((approved / total) * 100) : 0}% verified safe`,
       colorBg: 'rgba(16, 185, 129, 0.15)',
       colorIcon: '#34D399',
-      icon: CheckCircle2,
-      bars: [35, 50, 45, 65, 60, 80, 88],
-      barColor: '#34D399',
+      icon: ShieldCheck,
     },
     {
-      id: 'videos',
-      label: 'Videos',
-      value: stats?.videos ? stats.videos.toLocaleString() : '124',
-      trend: '+8%',
+      id: 'storage',
+      label: 'Cloud CDN Bandwidth',
+      value: formatStorage(totalBytes),
+      subtext: 'Optimized via Cloudinary',
       colorBg: 'rgba(236, 72, 153, 0.15)',
       colorIcon: '#F472B6',
-      icon: Video,
-      bars: [20, 30, 25, 50, 45, 60, 70],
-      barColor: '#F472B6',
+      icon: HardDrive,
     },
   ];
 
   return (
     <div className="metrics-row">
-      {defaultMetrics.map((item) => {
+      {metrics.map((item) => {
         const Icon = item.icon;
         return (
           <div key={item.id} className="metric-card">
@@ -66,26 +71,9 @@ export default function MetricsRow({ stats }) {
             </div>
 
             <div className="metric-trend">
-              <span className="trend-badge positive">
-                <TrendingUp size={11} />
-                {item.trend}
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>
+                {item.subtext}
               </span>
-
-              {/* Mini Sparkline Bar Chart */}
-              <svg className="sparkline-svg" viewBox="0 0 50 20">
-                {item.bars.map((height, i) => (
-                  <rect
-                    key={i}
-                    x={i * 7}
-                    y={20 - (height / 100) * 18}
-                    width="4"
-                    height={(height / 100) * 18}
-                    rx="1.5"
-                    fill={item.barColor}
-                    opacity={0.4 + (i / item.bars.length) * 0.6}
-                  />
-                ))}
-              </svg>
             </div>
           </div>
         );

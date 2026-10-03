@@ -3,25 +3,19 @@ import {
   LayoutDashboard,
   UploadCloud,
   Images,
-  Search,
   Sliders,
-  Video,
-  BarChart3,
-  Settings,
   Sparkles,
-  Zap
+  CloudCheck,
+  CheckCircle2,
+  Database
 } from 'lucide-react';
 
-export default function Sidebar({ activeTab, onSelectTab }) {
+export default function Sidebar({ activeTab, onSelectTab, totalAssets = 0 }) {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'upload', label: 'Upload', icon: UploadCloud },
+    { id: 'upload', label: 'Upload Studio', icon: UploadCloud },
     { id: 'library', label: 'Media Library', icon: Images },
-    { id: 'search', label: 'AI Search', icon: Search },
-    { id: 'transformations', label: 'Transformations', icon: Sliders },
-    { id: 'video', label: 'Video Pipeline', icon: Video },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'studio', label: 'Transformation Studio', icon: Sliders },
   ];
 
   return (
@@ -54,41 +48,30 @@ export default function Sidebar({ activeTab, onSelectTab }) {
         </nav>
       </div>
 
+      {/* Real Cloudinary & MongoDB Connection Widget */}
       <div className="sidebar-storage-card">
-        <div className="storage-info">
-          <div className="storage-ring-wrapper">
-            <svg viewBox="0 0 36 36" style={{ width: '42px', height: '42px', transform: 'rotate(-90deg)' }}>
-              <path
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                fill="none"
-                stroke="rgba(255, 255, 255, 0.1)"
-                strokeWidth="3.5"
-              />
-              <path
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                fill="none"
-                stroke="url(#storageGrad)"
-                strokeWidth="3.5"
-                strokeDasharray="68, 100"
-              />
-              <defs>
-                <linearGradient id="storageGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#06B6D4" />
-                  <stop offset="100%" stopColor="#8B5CF6" />
-                </linearGradient>
-              </defs>
-            </svg>
-            <span className="storage-percent" style={{ position: 'absolute' }}>68%</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 8px #10B981' }}></span>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#10B981', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+              Connected
+            </span>
           </div>
-          <div className="storage-texts">
-            <h4>Storage Used</h4>
-            <p>68 GB of 100 GB</p>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            {totalAssets} {totalAssets === 1 ? 'Asset' : 'Assets'}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <CloudCheck size={13} style={{ color: 'var(--accent-indigo)' }} />
+            <span>Cloudinary Media Cloud</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Database size={13} style={{ color: '#06B6D4' }} />
+            <span>MongoDB Atlas Synced</span>
           </div>
         </div>
-        <button className="btn-upgrade">
-          <Zap size={14} />
-          <span>Upgrade Plan</span>
-        </button>
       </div>
     </aside>
   );
