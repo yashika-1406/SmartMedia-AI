@@ -1,4 +1,27 @@
 {
+  "name": "smartmedia-ai",
+  "version": "1.0.0",
+  "description": "SmartMedia AI - Intelligent Media Management & Transformation Platform powered by Cloudinary for HackIndia 2026",
+  "private": true,
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "start:backend": "cd backend && npm start",
+    "build:frontend": "cd frontend && npm run build",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install"
+  },
+  "keywords": [
+    "hackindia",
+    "cloudinary",
+    "ai-media",
+    "smart-crop",
+    "background-removal",
+    "react19",
+    "express",
+    "mongodb"
+  ],
+  "author": "SmartMedia AI Team",
+  "license": "MIT",
   "dependencies": {
     "cloudinary": "^2.11.0"
   }
