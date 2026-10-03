@@ -20,16 +20,29 @@ const PORT = process.env.PORT || 5000;
 configureCloudinary();
 
 
-// CORS Middleware - supports both localhost and 127.0.0.1 local development hosts
+// CORS Middleware - supports local development and Vercel production domains
 const allowedOrigins = [
   process.env.CLIENT_URL,
+  'https://smartmediaai.vercel.app',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ].filter(Boolean);
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, Postman)
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith('.vercel.app') ||
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1')
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS blocked request from origin: ${origin}`));
+    },
     credentials: true,
   })
 );

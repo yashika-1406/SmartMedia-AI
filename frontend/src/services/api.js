@@ -6,8 +6,15 @@
 
 import axios from 'axios';
 
+const rawBaseURL =
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  'http://localhost:5000/api';
+
+const baseURL = rawBaseURL.replace(/\/+$/, '');
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
+  baseURL,
   timeout: 60000,
 });
 
@@ -15,10 +22,21 @@ const api = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    const message =
+    let message =
       error.response?.data?.message || error.message || 'An unexpected error occurred';
+    
+    if (
+      error.message === 'Network Error' &&
+      baseURL.includes('localhost') &&
+      typeof window !== 'undefined' &&
+      window.location.hostname !== 'localhost'
+    ) {
+      message =
+        'Backend connection failed: The frontend is deployed but pointing to localhost:5000. Set VITE_API_URL in Vercel to your deployed backend URL.';
+    }
+
     console.error('[API Error]:', message);
-    return Promise.reject(error);
+    return Promise.reject(new Error(message));
   }
 );
 
