@@ -45,8 +45,8 @@ flowchart TD
 
 ## Key Features
 
-### 1. Zero-Disk Buffer Streaming
-Uploads are processed via in-memory buffers directly to Cloudinary using standard streams, preventing ephemeral disk bloat and server-side memory leaks.
+### 1. Zero-Disk Buffer Streaming (Images & Videos)
+Uploads are processed via in-memory buffers directly to Cloudinary using standard streams, preventing ephemeral disk bloat and server-side memory leaks. Supports high-resolution images (up to 15MB) and videos (up to 100MB).
 
 ### 2. AI-Driven Smart Cropping
 Detects points of interest and subject faces dynamically using Cloudinary's `g_auto` gravity engine, allowing one-click adaptation for squares, banners, portrait cards, and custom dimensions without losing focal composition.
@@ -54,13 +54,22 @@ Detects points of interest and subject faces dynamically using Cloudinary's `g_a
 ### 3. Automated Background Removal
 Integrated background segmentation removes complex backdrops in real-time, delivering clean transparent assets ready for eCommerce, marketing collaterals, and avatars.
 
-### 4. Content Moderation & AI Tagging
+### 4. Cloudinary Video Transcoding & Adaptive Presets
+Full lifecycle video processing supporting on-the-fly transcoding and responsive delivery presets:
+- **Web Optimized**: Fast browser playback with adaptive streaming format.
+- **Social Square (1:1)**: Centered focal cropping for social media posts.
+- **Portrait Reel (9:16)**: Vertical composition tailored for Reels, Shorts, and Stories.
+- **Landscape HD (16:9)**: High-definition widescreen presentation.
+- **Preview Clip**: Automated 6-second teaser generation.
+- **Video Poster Extraction**: Generates optimized representative poster frames via `so_0,f_auto,q_auto`.
+
+### 5. Content Moderation & AI Tagging
 Runs uploaded assets through automated moderation checks and auto-tagging algorithms, ensuring brand safety and searchable media categorisation out-of-the-box.
 
-### 5. Dynamic Optimization (`f_auto`, `q_auto`)
+### 6. Dynamic Optimization (`f_auto`, `q_auto`)
 Delivers responsive media with optimal format conversion (AVIF/WebP) and compression based on the client browser and network bandwidth, minimizing latency and egress consumption.
 
-### 6. Cloudinary Agent Skills Specification
+### 7. Cloudinary Agent Skills Specification
 Equipped with verified agent skills (`cloudinary-docs`, `cloudinary-next`, `cloudinary-react`, `cloudinary-transformations`) locked under `skills-lock.json` to guide continuous engineering and best-practice asset delivery.
 
 ---
