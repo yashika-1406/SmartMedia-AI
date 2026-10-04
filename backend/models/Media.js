@@ -44,6 +44,24 @@ const mediaSchema = new mongoose.Schema(
     bytes: {
       type: Number,
     },
+    duration: {
+      type: Number,
+      default: null,
+    },
+    frameRate: {
+      type: Number,
+      default: null,
+    },
+    videoCodec: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    audioCodec: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     originalFilename: {
       type: String,
       trim: true,

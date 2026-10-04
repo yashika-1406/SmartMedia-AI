@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import UploadBox from '../components/media/UploadBox';
 import Button from '../components/common/Button';
-import { uploadImage } from '../services/api';
+import { uploadMedia } from '../services/api';
 
 /**
  * Upload Page - Phase 2 & 3: Cloudinary Upload + MongoDB Persistence
@@ -60,7 +60,7 @@ export default function Upload({ onNavigateToLibrary }) {
   const handleUpload = async () => {
     if (isUploading || !selectedFile) {
       if (!selectedFile) {
-        setErrorMessage('Please select an image file first.');
+        setErrorMessage('Please select an image or video file first.');
       }
       return;
     }
@@ -71,13 +71,13 @@ export default function Upload({ onNavigateToLibrary }) {
     setSuccessMessage('');
 
     try {
-      const response = await uploadImage(selectedFile, (progress) => {
+      const response = await uploadMedia(selectedFile, (progress) => {
         setUploadProgress(progress);
       });
 
       const mediaData = response.media || response.data || response;
       setUploadedMedia(mediaData);
-      setSuccessMessage('Image uploaded to Cloudinary & saved to MongoDB Atlas!');
+      setSuccessMessage('Media uploaded to Cloudinary & saved to MongoDB Atlas!');
       // Clean up local preview
       if (previewUrl) {
         URL.revokeObjectURL(previewUrl);
@@ -88,7 +88,7 @@ export default function Upload({ onNavigateToLibrary }) {
       const errorDetail =
         err.response?.data?.message ||
         err.message ||
-        'Failed to upload image. Please verify backend server, Cloudinary credentials, and MongoDB connection.';
+        'Failed to upload media. Please verify backend server, Cloudinary credentials, and MongoDB connection.';
       setErrorMessage(errorDetail);
     } finally {
       setIsUploading(false);
@@ -151,7 +151,7 @@ export default function Upload({ onNavigateToLibrary }) {
           <h1 style={{ fontSize: '26px', fontWeight: '700', margin: 0 }}>Media Ingestion Pipeline</h1>
         </div>
         <p style={{ margin: 0, color: '#64748b', fontSize: '15px' }}>
-          Upload high-resolution images to Cloudinary with metadata persistence in MongoDB Atlas.
+          Upload high-resolution images or videos to Cloudinary with metadata persistence in MongoDB Atlas.
         </p>
       </header>
 
@@ -317,15 +317,27 @@ export default function Upload({ onNavigateToLibrary }) {
                 }}
               >
                 {displaySecureUrl && (
-                  <img
-                    src={displaySecureUrl}
-                    alt={displayPublicId || 'Uploaded asset'}
-                    style={{
-                      maxWidth: '100%',
-                      maxHeight: '440px',
-                      objectFit: 'contain',
-                    }}
-                  />
+                  displayResourceType === 'video' ? (
+                    <video
+                      controls
+                      src={displaySecureUrl}
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '440px',
+                        objectFit: 'contain',
+                      }}
+                    />
+                  ) : (
+                    <img
+                      src={displaySecureUrl}
+                      alt={displayPublicId || 'Uploaded asset'}
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '440px',
+                        objectFit: 'contain',
+                      }}
+                    />
+                  )
                 )}
               </div>
 
@@ -543,6 +555,25 @@ export default function Upload({ onNavigateToLibrary }) {
                     {formatBytes(uploadedMedia.bytes)}
                   </div>
                 </div>
+
+                {/* Duration (if video) */}
+                {typeof uploadedMedia.duration === 'number' && (
+                  <div
+                    style={{
+                      backgroundColor: 'var(--bg, #ffffff)',
+                      padding: '12px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border, #e2e8f0)',
+                    }}
+                  >
+                    <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Duration
+                    </div>
+                    <div style={{ fontSize: '15px', fontWeight: '600', marginTop: '2px', color: 'var(--accent, #6366f1)' }}>
+                      {Math.round(uploadedMedia.duration * 10) / 10}s
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Timestamp */}

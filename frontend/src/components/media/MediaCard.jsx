@@ -1,22 +1,31 @@
 import React, { useState } from 'react';
-import { Image as ImageIcon, AlertCircle, ShieldCheck, ShieldAlert, Clock } from 'lucide-react';
+import { Image as ImageIcon, Film, Play, AlertCircle, ShieldCheck, ShieldAlert, Clock } from 'lucide-react';
 import { formatBytes, formatDate } from '../../utils/formatters';
-import { getOptimizedUrl } from '../../utils/cloudinary';
+import { getOptimizedUrl, getVideoThumbnailUrl } from '../../utils/cloudinary';
 
 /**
  * MediaCard Component
  * Displays an individual Cloudinary media asset with MongoDB metadata.
+ * Renders video thumbnail poster with Play icon overlay and duration for videos.
  */
 export default function MediaCard({ media, onSelect }) {
   const [imageError, setImageError] = useState(false);
 
   if (!media) return null;
 
+  const isVideo = media.resourceType === 'video';
   const displayName = media.originalFilename || media.publicId?.split('/').pop() || 'Untitled Asset';
-  const formatText = media.format ? media.format.toUpperCase() : 'IMG';
+  const formatText = media.format ? media.format.toUpperCase() : (isVideo ? 'VIDEO' : 'IMG');
   const dimensionsText = media.width && media.height ? `${media.width} × ${media.height}` : null;
   const sizeText = formatBytes(media.bytes);
   const dateText = formatDate(media.createdAt);
+
+  // For videos: generate derived image poster frame; never use original video URL in <img>
+  const displayThumbnailUrl = isVideo
+    ? getVideoThumbnailUrl(media, { width: 600, crop: 'limit', startOffset: '0' })
+    : getOptimizedUrl(media, { width: 600, crop: 'limit' });
+
+  const imageSrc = isVideo ? displayThumbnailUrl : (displayThumbnailUrl || media.secureUrl);
 
   return (
     <div
@@ -42,7 +51,7 @@ export default function MediaCard({ media, onSelect }) {
         e.currentTarget.style.borderColor = 'var(--border, #e2e8f0)';
       }}
     >
-      {/* Media Image Thumbnail Container */}
+      {/* Media Image / Video Poster Thumbnail Container */}
       <div
         style={{
           width: '100%',
@@ -55,9 +64,9 @@ export default function MediaCard({ media, onSelect }) {
           overflow: 'hidden',
         }}
       >
-        {!imageError && media.secureUrl ? (
+        {!imageError && imageSrc ? (
           <img
-            src={getOptimizedUrl(media, { width: 600, crop: 'limit' })}
+            src={imageSrc}
             alt={displayName}
             loading="lazy"
             onError={() => setImageError(true)}
@@ -74,14 +83,79 @@ export default function MediaCard({ media, onSelect }) {
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: '6px',
+              gap: '8px',
               color: '#94a3b8',
               fontSize: '13px',
+              padding: '16px',
+              textAlign: 'center',
             }}
           >
-            {imageError ? <AlertCircle size={24} /> : <ImageIcon size={24} />}
-            <span>{imageError ? 'Preview unavailable' : 'No preview'}</span>
+            {isVideo ? (
+              <>
+                <Film size={28} style={{ color: 'var(--accent, #6366f1)' }} />
+                <span style={{ fontWeight: '500', color: '#cbd5e1' }}>Video Preview</span>
+              </>
+            ) : imageError ? (
+              <>
+                <AlertCircle size={24} style={{ color: '#ef4444' }} />
+                <span>Preview unavailable</span>
+              </>
+            ) : (
+              <>
+                <ImageIcon size={24} />
+                <span>No preview</span>
+              </>
+            )}
           </div>
+        )}
+
+        {/* Video Play Icon Overlay (Phase 12) */}
+        {isVideo && !imageError && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '46px',
+              height: '46px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(15, 23, 42, 0.7)',
+              border: '2px solid rgba(255, 255, 255, 0.9)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
+              backdropFilter: 'blur(4px)',
+              pointerEvents: 'none',
+              transition: 'transform 0.2s ease',
+            }}
+          >
+            <Play size={22} fill="#ffffff" style={{ marginLeft: '3px' }} />
+          </div>
+        )}
+
+        {/* Video Duration Badge (Phase 12) */}
+        {isVideo && typeof media.duration === 'number' && (
+          <span
+            style={{
+              position: 'absolute',
+              bottom: '10px',
+              right: '10px',
+              backgroundColor: 'rgba(15, 23, 42, 0.85)',
+              color: '#f8fafc',
+              fontSize: '11px',
+              fontWeight: '600',
+              padding: '2px 7px',
+              borderRadius: '4px',
+              backdropFilter: 'blur(4px)',
+              letterSpacing: '0.3px',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+            }}
+          >
+            {Math.round(media.duration)} sec
+          </span>
         )}
 
         {/* Moderation Status Badge (Phase 6) */}
@@ -221,6 +295,12 @@ export default function MediaCard({ media, onSelect }) {
               <>
                 <span>•</span>
                 <span>{dimensionsText}</span>
+              </>
+            )}
+            {isVideo && typeof media.duration === 'number' && (
+              <>
+                <span>•</span>
+                <span>{Math.round(media.duration)} sec</span>
               </>
             )}
           </div>

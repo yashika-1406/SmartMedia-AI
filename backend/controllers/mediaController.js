@@ -21,7 +21,7 @@ const mediaController = {
       if (!req.file) {
         return res.status(400).json({
           success: false,
-          message: 'No image file uploaded. Please attach an image in the "file" field.',
+          message: 'No media file uploaded. Please attach an image or video in the "file" field.',
         });
       }
 
@@ -42,24 +42,56 @@ const mediaController = {
         });
       }
 
-      // 4. Upload image buffer to Cloudinary
-      const cloudinaryResult = await cloudinaryService.uploadImage(req.file.buffer, {
-        original_filename: req.file.originalname,
-      });
+      const resourceType = (req.file.mimetype || '').toLowerCase().startsWith('video/')
+        ? 'video'
+        : 'image';
+      const isVideo = resourceType === 'video';
 
-      // 4b. Phase 7: Build structured metadata and synchronize to Cloudinary
-      const builtMetadata = cloudinaryService.buildMetadata({
-        resourceType: cloudinaryResult.resource_type || 'image',
-        tags: cloudinaryResult.tags || [],
-        taggingStatus: cloudinaryResult.taggingStatus || 'unavailable',
-        moderationStatus: cloudinaryResult.moderationStatus || 'pending',
-      });
+      let cloudinaryResult;
+      let builtMetadata;
 
-      try {
-        await cloudinaryService.ensureMetadataFields();
-        await cloudinaryService.updateStructuredMetadata(cloudinaryResult.public_id, builtMetadata);
-      } catch (metaErr) {
-        console.warn('[MediaController] Non-fatal warning syncing metadata to Cloudinary on upload:', metaErr.message);
+      if (isVideo) {
+        // Phase 12: Video Pipeline (bypasses image-only AI auto-tagging and image moderation)
+        cloudinaryResult = await cloudinaryService.uploadMedia(req.file.buffer, {
+          resourceType: 'video',
+          original_filename: req.file.originalname,
+          originalFilename: req.file.originalname,
+        });
+
+        builtMetadata = {
+          category: 'General',
+          contentType: 'video',
+          approvalStatus: 'Approved',
+          aiProcessed: false,
+        };
+
+        try {
+          await cloudinaryService.ensureMetadataFields();
+          await cloudinaryService.updateStructuredMetadata(cloudinaryResult.public_id, builtMetadata);
+        } catch (metaErr) {
+          console.warn('[MediaController] Non-fatal warning syncing video metadata to Cloudinary:', metaErr.message);
+        }
+      } else {
+        // Existing Image Pipeline (Phases 1-11)
+        cloudinaryResult = await cloudinaryService.uploadMedia(req.file.buffer, {
+          resourceType: 'image',
+          original_filename: req.file.originalname,
+          originalFilename: req.file.originalname,
+        });
+
+        builtMetadata = cloudinaryService.buildMetadata({
+          resourceType: cloudinaryResult.resource_type || 'image',
+          tags: cloudinaryResult.tags || [],
+          taggingStatus: cloudinaryResult.taggingStatus || 'unavailable',
+          moderationStatus: cloudinaryResult.moderationStatus || 'pending',
+        });
+
+        try {
+          await cloudinaryService.ensureMetadataFields();
+          await cloudinaryService.updateStructuredMetadata(cloudinaryResult.public_id, builtMetadata);
+        } catch (metaErr) {
+          console.warn('[MediaController] Non-fatal warning syncing metadata to Cloudinary on upload:', metaErr.message);
+        }
       }
 
       // 5. Persist media metadata document to MongoDB Atlas
@@ -69,18 +101,22 @@ const mediaController = {
           publicId: cloudinaryResult.public_id,
           secureUrl: cloudinaryResult.secure_url,
           assetId: cloudinaryResult.asset_id,
-          resourceType: cloudinaryResult.resource_type || 'image',
+          resourceType: cloudinaryResult.resource_type || (isVideo ? 'video' : 'image'),
           format: cloudinaryResult.format,
           width: cloudinaryResult.width,
           height: cloudinaryResult.height,
+          duration: typeof cloudinaryResult.duration === 'number' ? cloudinaryResult.duration : null,
+          frameRate: typeof cloudinaryResult.frame_rate === 'number' ? cloudinaryResult.frame_rate : null,
+          videoCodec: cloudinaryResult.video_codec || null,
+          audioCodec: cloudinaryResult.audio_codec || null,
           bytes: cloudinaryResult.bytes,
           originalFilename: cloudinaryResult.original_filename || req.file.originalname,
           folder: cloudinaryResult.folder || 'smartmedia/uploads',
           tags: cloudinaryResult.tags || [],
           taggingStatus: cloudinaryResult.taggingStatus || 'unavailable',
           taggingError: cloudinaryResult.taggingError || null,
-          moderationStatus: cloudinaryResult.moderationStatus || 'pending',
-          moderationKind: cloudinaryResult.moderationKind || 'aws_rek',
+          moderationStatus: cloudinaryResult.moderationStatus || (isVideo ? 'approved' : 'pending'),
+          moderationKind: cloudinaryResult.moderationKind || (isVideo ? null : 'aws_rek'),
           moderationLabels: cloudinaryResult.moderationLabels || [],
           moderationUpdatedAt: cloudinaryResult.moderationUpdatedAt || new Date(),
           moderationError: cloudinaryResult.moderationError || null,
@@ -107,6 +143,10 @@ const mediaController = {
         message: 'Media uploaded successfully',
         media: savedMedia,
         data: savedMedia,
+        duration: savedMedia.duration,
+        frameRate: savedMedia.frameRate,
+        videoCodec: savedMedia.videoCodec,
+        audioCodec: savedMedia.audioCodec,
         tags: savedMedia.tags,
         taggingStatus: savedMedia.taggingStatus,
         taggingError: savedMedia.taggingError,
@@ -625,15 +665,42 @@ const mediaController = {
         });
       }
 
-      // Confirm resource type is image
-      if (media.resourceType && media.resourceType !== 'image') {
-        return res.status(400).json({
-          success: false,
-          message: 'Transformation studio is only supported for image assets.',
+      const isVideo = media.resourceType === 'video';
+
+      if (isVideo) {
+        // Phase 12: Video Transformation Pipeline
+        const cleanPreset = String(preset || 'web_optimized').toLowerCase();
+        if (!cloudinaryService.VIDEO_PRESETS[cleanPreset]) {
+          return res.status(400).json({
+            success: false,
+            message: `Invalid video preset "${preset}". Allowed presets: ${Object.keys(
+              cloudinaryService.VIDEO_PRESETS
+            ).join(', ')}`,
+          });
+        }
+
+        const transformResult = cloudinaryService.generateVideoTransformation(
+          media.publicId,
+          cleanPreset
+        );
+
+        return res.status(200).json({
+          success: true,
+          mediaId: media._id,
+          publicId: media.publicId,
+          resourceType: 'video',
+          originalUrl: media.secureUrl,
+          preset: cleanPreset,
+          presetInfo: transformResult.presetInfo,
+          transformedUrl: transformResult.url,
+          format: transformResult.format || 'auto',
+          status: 'completed',
+          message: 'Video transformation generated successfully',
         });
       }
 
-      // Validate preset against allowlist
+      // Existing Image Transformation Studio (Phase 11)
+      // Validate preset against image allowlist
       const cleanPreset = String(preset || 'square').toLowerCase();
       if (!cloudinaryService.CROP_PRESETS[cleanPreset]) {
         return res.status(400).json({
@@ -656,6 +723,7 @@ const mediaController = {
         success: true,
         mediaId: media._id,
         publicId: media.publicId,
+        resourceType: 'image',
         originalUrl: media.secureUrl,
         preset: cleanPreset,
         presetInfo: transformResult.presetInfo,

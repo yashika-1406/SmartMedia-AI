@@ -23,6 +23,7 @@ import {
   Wand2,
   Zap,
   Sliders,
+  Film,
 } from 'lucide-react';
 import Button from '../components/common/Button';
 import Loader from '../components/common/Loader';
@@ -36,7 +37,7 @@ import {
   transformMedia,
 } from '../services/api';
 import { formatBytes, formatDate } from '../utils/formatters';
-import { getOptimizedUrl } from '../utils/cloudinary';
+import { getOptimizedUrl, getVideoThumbnailUrl } from '../utils/cloudinary';
 
 const CROP_PRESETS = [
   { id: 'square', label: 'Square', ratio: '1:1', dims: '800 × 800', desc: 'Social & Profile' },
@@ -46,8 +47,16 @@ const CROP_PRESETS = [
   { id: 'thumbnail', label: 'Thumbnail', ratio: '1:1', dims: '400 × 400', desc: 'Avatar / Icon' },
 ];
 
+const VIDEO_TRANSFORM_PRESETS = [
+  { id: 'web_optimized', label: 'Web Optimized', ratio: 'Native', dims: 'Auto Codec', desc: 'Browser-optimized delivery (f_auto, q_auto)' },
+  { id: 'social_square', label: 'Social Square', ratio: '1:1', dims: '720 × 720', desc: 'Square 1:1 post format for social feeds' },
+  { id: 'portrait_reel', label: 'Portrait Reel', ratio: '9:16', dims: '720 × 1280', desc: 'Vertical 9:16 format for Reels & Stories' },
+  { id: 'landscape_hd', label: 'Landscape HD', ratio: '16:9', dims: '1280 × 720', desc: 'Standard 16:9 HD widescreen display' },
+  { id: 'preview_clip', label: 'Preview Clip', ratio: '6s Clip', dims: 'Trimmed', desc: 'Short 6-second teaser preview (du_6,so_0)' },
+];
+
 /**
- * MediaDetails Page - Phase 3: Inspector, Phase 6: Moderation, Phase 7: Metadata, Phase 8: Smart Crop
+ * MediaDetails Page - Phase 3: Inspector, Phase 6: Moderation, Phase 7: Metadata, Phase 8: Smart Crop, Phase 12: Video Pipeline
  * Loads single asset metadata from GET /api/media/:id
  */
 export default function MediaDetails({ mediaId, onBack }) {
@@ -57,6 +66,12 @@ export default function MediaDetails({ mediaId, onBack }) {
   const [copiedField, setCopiedField] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisNotice, setAnalysisNotice] = useState(null);
+
+  // Phase 12: Video Transformation Pipeline state
+  const [selectedVideoPreset, setSelectedVideoPreset] = useState('web_optimized');
+  const [videoTransformData, setVideoTransformData] = useState(null);
+  const [isVideoTransforming, setIsVideoTransforming] = useState(false);
+  const [videoTransformError, setVideoTransformError] = useState(null);
 
   // Phase 8: Content-Aware Smart Crop state
   const [activeCropPreset, setActiveCropPreset] = useState('square');
@@ -176,6 +191,33 @@ export default function MediaDetails({ mediaId, onBack }) {
       setStudioError(message);
     } finally {
       setIsTransforming(false);
+    }
+  };
+
+  // Phase 12: Video transformation handler
+  const handleGenerateVideoTransform = async (customPreset) => {
+    if (isVideoTransforming || !media?._id) return;
+
+    const presetToUse = customPreset !== undefined ? customPreset : selectedVideoPreset;
+
+    setIsVideoTransforming(true);
+    setVideoTransformError(null);
+
+    try {
+      const response = await transformMedia(media._id, {
+        preset: presetToUse,
+      });
+      setVideoTransformData(response);
+      setSelectedVideoPreset(presetToUse);
+    } catch (err) {
+      console.warn('[MediaDetails] Video Transformation error:', err);
+      const message =
+        err.response?.data?.message ||
+        err.message ||
+        'Unable to generate video transformation. Please try again.';
+      setVideoTransformError(message);
+    } finally {
+      setIsVideoTransforming(false);
     }
   };
 
@@ -304,7 +346,7 @@ export default function MediaDetails({ mediaId, onBack }) {
         if (isMounted) {
           setMedia(asset);
         }
-        if (asset?._id) {
+        if (asset?._id && asset.resourceType !== 'video') {
           try {
             const cropRes = await getSmartCrop(asset._id, 'square');
             if (isMounted) {
@@ -385,10 +427,23 @@ export default function MediaDetails({ mediaId, onBack }) {
   }
 
   const displayName = media.originalFilename || media.publicId?.split('/').pop() || 'Untitled Asset';
-  const formatText = media.format ? media.format.toUpperCase() : 'UNKNOWN';
+  const isVideo = media.resourceType === 'video';
+  const formatText = media.format ? media.format.toUpperCase() : (isVideo ? 'VIDEO' : 'UNKNOWN');
   const dimensionsText = media.width && media.height ? `${media.width} × ${media.height} px` : 'N/A';
   const sizeText = formatBytes(media.bytes);
   const createdDate = formatDate(media.createdAt, true);
+
+  const videoThumbnailUrl = isVideo
+    ? getVideoThumbnailUrl(media, { width: 800, crop: 'limit', startOffset: '0' })
+    : '';
+
+  const formatDurationText = (seconds) => {
+    if (typeof seconds !== 'number' || isNaN(seconds)) return null;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    const mmss = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    return `${mmss} (${(Math.round(seconds * 10) / 10).toFixed(1)}s)`;
+  };
 
   return (
     <div style={{ padding: '28px', maxWidth: '1100px', margin: '0 auto', textAlign: 'left' }}>
@@ -433,7 +488,7 @@ export default function MediaDetails({ mediaId, onBack }) {
             alignItems: 'start',
           }}
         >
-          {/* Left Column: Full Image Preview */}
+          {/* Left Column: Full Image Preview / Real Video Player */}
           <div>
             <div
               style={{
@@ -450,15 +505,29 @@ export default function MediaDetails({ mediaId, onBack }) {
               }}
             >
               {media.secureUrl ? (
-                <img
-                  src={getOptimizedUrl(media, { width: 1600, crop: 'limit' })}
-                  alt={displayName}
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: '520px',
-                    objectFit: 'contain',
-                  }}
-                />
+                isVideo ? (
+                  <video
+                    src={media.secureUrl}
+                    controls
+                    preload="metadata"
+                    poster={videoThumbnailUrl}
+                    style={{
+                      width: '100%',
+                      maxHeight: '520px',
+                      objectFit: 'contain',
+                    }}
+                  />
+                ) : (
+                  <img
+                    src={getOptimizedUrl(media, { width: 1600, crop: 'limit' })}
+                    alt={displayName}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '520px',
+                      objectFit: 'contain',
+                    }}
+                  />
+                )
               ) : (
                 <div style={{ color: '#94a3b8' }}>Preview not available</div>
               )}
@@ -570,11 +639,32 @@ export default function MediaDetails({ mediaId, onBack }) {
                     {sizeText}
                   </div>
                 </div>
+
+                {media.resourceType === 'video' && typeof media.duration === 'number' && (
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Duration</div>
+                    <div style={{ fontSize: '15px', fontWeight: '600', color: 'var(--accent, #6366f1)', marginTop: '2px' }}>
+                      {formatDurationText(media.duration)}
+                    </div>
+                  </div>
+                )}
+
+                {media.resourceType === 'video' && (media.videoCodec || media.audioCodec) && (
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Codecs</div>
+                    <div style={{ fontSize: '14px', fontWeight: '600', marginTop: '2px' }}>
+                      {[media.videoCodec?.toUpperCase(), media.audioCodec?.toUpperCase()].filter(Boolean).join(' / ') || 'H.264'}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Cloudinary AI Auto-Tags Section */}
-            <div
+            {/* Image-only AI Auto-Tags and Moderation (Phases 4 & 6) */}
+            {media.resourceType !== 'video' && (
+              <>
+                {/* Cloudinary AI Auto-Tags Section */}
+                <div
               style={{
                 backgroundColor: 'var(--bg, #ffffff)',
                 border: '1px solid #c7d2fe',
@@ -993,9 +1083,11 @@ export default function MediaDetails({ mediaId, onBack }) {
                 </div>
               )}
             </div>
+          </>
+        )}
 
-            {/* Structured Metadata Section (Phase 7: Cloudinary Structured Metadata) */}
-            <div
+        {/* Structured Metadata Section (Phase 7: Cloudinary Structured Metadata) */}
+        <div
               style={{
                 backgroundColor: 'var(--bg, #ffffff)',
                 border: '1px solid var(--border, #e2e8f0)',
@@ -1241,8 +1333,457 @@ export default function MediaDetails({ mediaId, onBack }) {
               )}
             </div>
 
-            {/* AI Media Tools — Content-Aware Smart Cropping (Phase 8) */}
-            <div
+            {/* Phase 12: Video Transformation Studio (Only for video assets) */}
+            {media.resourceType === 'video' && (
+              <div
+                style={{
+                  backgroundColor: 'var(--bg, #ffffff)',
+                  border: '1px solid var(--border, #e2e8f0)',
+                  borderRadius: '12px',
+                  padding: '18px',
+                }}
+              >
+                {/* Header */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '6px',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      color: '#6366f1',
+                      margin: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <Sliders size={16} />
+                    <span>Video Transformations</span>
+                  </h3>
+
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: '600',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                      color: '#4f46e5',
+                    }}
+                  >
+                    f_auto · q_auto · Cloudinary Video
+                  </span>
+                </div>
+
+                <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+                  Select an allowlisted video preset to transcode, resize, crop, or trim the video asset on-the-fly via Cloudinary CDN delivery.
+                </p>
+
+                {/* Preset Buttons */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      color: '#94a3b8',
+                      textTransform: 'uppercase',
+                      marginBottom: '8px',
+                      fontWeight: '600',
+                    }}
+                  >
+                    Video Transformation Presets
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {VIDEO_TRANSFORM_PRESETS.map((preset) => {
+                      const isActive = selectedVideoPreset === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedVideoPreset(preset.id);
+                            handleGenerateVideoTransform(preset.id);
+                          }}
+                          disabled={isVideoTransforming}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-start',
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            border: isActive ? '2px solid #6366f1' : '1px solid var(--border, #e2e8f0)',
+                            backgroundColor: isActive ? 'rgba(99, 102, 241, 0.08)' : 'var(--code-bg, #f8fafc)',
+                            cursor: isVideoTransforming ? 'not-allowed' : 'pointer',
+                            transition: 'all 0.15s ease',
+                            minWidth: '115px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '6px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: isActive ? '700' : '600', color: isActive ? '#4f46e5' : '#0f172a' }}>
+                              {preset.label}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: '600',
+                                padding: '1px 5px',
+                                borderRadius: '4px',
+                                backgroundColor: isActive ? '#6366f1' : '#e2e8f0',
+                                color: isActive ? '#ffffff' : '#64748b',
+                              }}
+                            >
+                              {preset.ratio}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px' }}>
+                            {preset.dims}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Delivery details and action row */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                    padding: '12px 14px',
+                    backgroundColor: 'var(--code-bg, #f8fafc)',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border, #f1f5f9)',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', fontSize: '12px', color: '#475569' }}>
+                    <div>
+                      Delivery: <strong style={{ color: '#0f172a' }}>Format: Auto (f_auto)</strong> · <strong style={{ color: '#0f172a' }}>Quality: Auto (q_auto)</strong>
+                    </div>
+                    <div>
+                      Transcoding: <strong style={{ color: '#4f46e5' }}>Cloudinary CDN Dynamic Edge</strong>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="primary"
+                    onClick={() => handleGenerateVideoTransform()}
+                    disabled={isVideoTransforming}
+                    icon={Sparkles}
+                    style={{
+                      fontSize: '13px',
+                      padding: '8px 18px',
+                      backgroundColor: isVideoTransforming ? '#94a3b8' : '#4f46e5',
+                    }}
+                  >
+                    {isVideoTransforming ? 'Generating video preview...' : 'Generate Video Preview'}
+                  </Button>
+                </div>
+
+                {/* Video Error Banner */}
+                {videoTransformError && (
+                  <div
+                    style={{
+                      marginBottom: '16px',
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      backgroundColor: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      color: '#991b1b',
+                      fontSize: '13px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '8px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <AlertTriangle size={16} />
+                      <span>{videoTransformError}</span>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      onClick={() => handleGenerateVideoTransform()}
+                      style={{ fontSize: '12px', padding: '4px 10px' }}
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                )}
+
+                {/* Live Video Preview Comparison: Original vs Transformed */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                    gap: '16px',
+                  }}
+                >
+                  {/* Left Player: Original Video */}
+                  <div
+                    style={{
+                      border: '1px solid var(--border, #e2e8f0)',
+                      borderRadius: '10px',
+                      overflow: 'hidden',
+                      backgroundColor: 'var(--code-bg, #f8fafc)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '10px 14px',
+                        borderBottom: '1px solid var(--border, #e2e8f0)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: 'var(--bg, #ffffff)',
+                      }}
+                    >
+                      <span style={{ fontSize: '12px', fontWeight: '700', color: '#0f172a' }}>
+                        Original Video
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: '600',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          backgroundColor: '#f1f5f9',
+                          color: '#64748b',
+                        }}
+                      >
+                        {media.width || 0} × {media.height || 0} · Untouched
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        minHeight: '260px',
+                        maxHeight: '380px',
+                        backgroundColor: '#0f172a',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        position: 'relative',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <video
+                        controls
+                        preload="metadata"
+                        src={media.secureUrl}
+                        style={{
+                          maxWidth: '100%',
+                          maxHeight: '380px',
+                          objectFit: 'contain',
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ padding: '8px 12px', fontSize: '11px', color: '#94a3b8' }}>
+                      Original video asset remains completely untouched in Cloudinary and MongoDB.
+                    </div>
+                  </div>
+
+                  {/* Right Player: Transformed Video Output */}
+                  <div
+                    style={{
+                      border: '1px solid #c7d2fe',
+                      borderRadius: '10px',
+                      overflow: 'hidden',
+                      backgroundColor: 'var(--code-bg, #f8fafc)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '10px 14px',
+                        borderBottom: '1px solid #c7d2fe',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: '#f5f7ff',
+                      }}
+                    >
+                      <span style={{ fontSize: '12px', fontWeight: '700', color: '#312e81' }}>
+                        Transformed Video
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: '700',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          backgroundColor: '#dcfce7',
+                          color: '#166534',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        <Check size={11} />
+                        {videoTransformData?.presetInfo?.name || selectedVideoPreset.replace('_', ' ').toUpperCase()} · f_auto
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        minHeight: '260px',
+                        maxHeight: '380px',
+                        backgroundColor: '#0f172a',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        position: 'relative',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {isVideoTransforming ? (
+                        <div
+                          style={{
+                            padding: '40px 16px',
+                            textAlign: 'center',
+                            color: '#4f46e5',
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            borderRadius: '8px',
+                          }}
+                        >
+                          <Loader size={28} text="Generating video preview..." />
+                        </div>
+                      ) : videoTransformData?.transformedUrl ? (
+                        <video
+                          key={videoTransformData.transformedUrl}
+                          controls
+                          preload="metadata"
+                          src={videoTransformData.transformedUrl}
+                          style={{
+                            maxWidth: '100%',
+                            maxHeight: '380px',
+                            objectFit: 'contain',
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            padding: '30px 16px',
+                            textAlign: 'center',
+                            color: '#64748b',
+                            fontSize: '12px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            borderRadius: '8px',
+                          }}
+                        >
+                          <Film size={24} style={{ margin: '0 auto 6px auto', color: '#6366f1' }} />
+                          <div>
+                            Choose a video preset above and click "Generate Video Preview".
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Transformed URL and actions */}
+                    <div
+                      style={{
+                        padding: '8px 12px',
+                        fontSize: '11px',
+                        color: '#475569',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '8px',
+                      }}
+                    >
+                      <span style={{ color: '#166534', fontWeight: '500' }}>
+                        {videoTransformData?.transformedUrl
+                          ? '✓ Real Cloudinary derived video transformation active'
+                          : 'Derived video output'}
+                      </span>
+                      {videoTransformData?.transformedUrl && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(videoTransformData.transformedUrl, 'video_url')}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              fontSize: '11px',
+                              fontWeight: '600',
+                              color: copiedField === 'video_url' ? '#16a34a' : '#4f46e5',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: 0,
+                            }}
+                          >
+                            {copiedField === 'video_url' ? <Check size={12} /> : <Copy size={12} />}
+                            <span>{copiedField === 'video_url' ? 'Copied URL!' : 'Copy Cloudinary URL'}</span>
+                          </button>
+                          <a
+                            href={videoTransformData.transformedUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: '600',
+                              color: '#4f46e5',
+                              textDecoration: 'underline',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '2px',
+                            }}
+                          >
+                            <span>Open Result</span>
+                            <ExternalLink size={11} />
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Image-only AI Tools Notice for Video Assets (Section 15) */}
+            {media.resourceType === 'video' && (
+              <div
+                style={{
+                  backgroundColor: 'var(--bg, #ffffff)',
+                  border: '1px solid var(--border, #e2e8f0)',
+                  borderRadius: '12px',
+                  padding: '16px 18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  color: '#64748b',
+                  fontSize: '13px',
+                }}
+              >
+                <Info size={18} style={{ color: 'var(--accent, #6366f1)', flexShrink: 0 }} />
+                <span>Image-specific AI tools are not available for video assets.</span>
+              </div>
+            )}
+
+            {/* Image-only Transformation Pipeline (Phases 8-11) */}
+            {media.resourceType !== 'video' && (
+              <>
+                {/* AI Media Tools — Content-Aware Smart Cropping (Phase 8) */}
+                <div
               style={{
                 backgroundColor: 'var(--bg, #ffffff)',
                 border: '1px solid var(--border, #e2e8f0)',
@@ -2684,6 +3225,8 @@ export default function MediaDetails({ mediaId, onBack }) {
                 </div>
               </div>
             </div>
+          </>
+        )}
 
             {/* Cloudinary Information Section */}
             <div

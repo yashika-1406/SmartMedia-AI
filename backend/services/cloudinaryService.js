@@ -210,6 +210,65 @@ const cloudinaryService = {
   },
 
   /**
+   * Phase 12: Unified upload method for image and video media
+   *
+   * @param {Buffer} buffer - File buffer from Multer memory storage
+   * @param {Object} [options={}] - Upload options including resourceType and originalFilename
+   * @returns {Promise<Object>} Cloudinary API result
+   */
+  uploadMedia: async (buffer, options = {}) => {
+    const resourceType = options.resourceType === 'video' ? 'video' : 'image';
+    if (resourceType === 'video') {
+      return cloudinaryService.uploadVideo(buffer, options);
+    }
+    return cloudinaryService.uploadImage(buffer, options);
+  },
+
+  /**
+   * Phase 12: Upload a video buffer to Cloudinary using upload_stream
+   * Uses resource_type: 'video'
+   * Stored in the logical folder 'smartmedia/uploads'
+   *
+   * @param {Buffer} buffer - File buffer from Multer memory storage
+   * @param {Object} [options={}] - Optional upload parameters
+   * @returns {Promise<Object>} Cloudinary API result with video metadata
+   */
+  uploadVideo: async (buffer, options = {}) => {
+    const baseUploadOptions = {
+      folder: 'smartmedia/uploads',
+      resource_type: 'video',
+      use_filename: true,
+      unique_filename: true,
+      ...options,
+    };
+
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        baseUploadOptions,
+        (error, result) => {
+          if (error) {
+            return reject(error);
+          }
+          resolve({
+            ...result,
+            resource_type: 'video',
+            duration: typeof result.duration === 'number' ? result.duration : null,
+            frame_rate: typeof result.frame_rate === 'number' ? result.frame_rate : null,
+            video_codec: result.video?.codec || result.video_codec || null,
+            audio_codec: result.audio?.codec || result.audio_codec || null,
+            tags: Array.isArray(result.tags) ? result.tags : [],
+            taggingStatus: 'unavailable',
+            moderationStatus: 'approved',
+          });
+        }
+      );
+
+      const readable = Readable.from(buffer);
+      readable.pipe(uploadStream);
+    });
+  },
+
+  /**
    * Analyze an already-stored Cloudinary asset using Admin API update
    * Without downloading or re-uploading the media binary
    *
@@ -819,6 +878,122 @@ const cloudinaryService = {
         url,
       };
     }
+  },
+
+  /**
+   * Phase 12: Video Transformation Presets Allowlist
+   */
+  VIDEO_PRESETS: {
+    web_optimized: {
+      name: 'Web Optimized',
+      description: 'Optimized delivery for streaming and web browsers',
+      transformation: [
+        { fetch_format: 'auto' },
+        { quality: 'auto' },
+      ],
+    },
+    social_square: {
+      name: 'Social Square',
+      aspectRatio: '1:1',
+      width: 720,
+      height: 720,
+      description: 'Square 1:1 post format for social feeds',
+      transformation: [
+        { crop: 'fill', width: 720, height: 720, aspect_ratio: '1:1' },
+        { fetch_format: 'auto' },
+        { quality: 'auto' },
+      ],
+    },
+    portrait_reel: {
+      name: 'Portrait Reel',
+      aspectRatio: '9:16',
+      width: 720,
+      height: 1280,
+      description: 'Vertical 9:16 format for Reels, Shorts & Stories',
+      transformation: [
+        { crop: 'fill', width: 720, height: 1280, aspect_ratio: '9:16' },
+        { fetch_format: 'auto' },
+        { quality: 'auto' },
+      ],
+    },
+    landscape_hd: {
+      name: 'Landscape HD',
+      aspectRatio: '16:9',
+      width: 1280,
+      height: 720,
+      description: 'Standard 16:9 HD widescreen display',
+      transformation: [
+        { crop: 'fill', width: 1280, height: 720, aspect_ratio: '16:9' },
+        { fetch_format: 'auto' },
+        { quality: 'auto' },
+      ],
+    },
+    preview_clip: {
+      name: 'Preview Clip',
+      description: 'Short 6-second teaser preview',
+      transformation: [
+        { start_offset: '0', duration: '6' },
+        { fetch_format: 'auto' },
+        { quality: 'auto' },
+      ],
+    },
+  },
+
+  /**
+   * Phase 12: Generates a derived video transformation URL
+   *
+   * @param {string} publicId - Cloudinary asset public ID
+   * @param {string} presetKey - One of allowlisted VIDEO_PRESETS
+   * @returns {Object} { preset, presetInfo, url, format }
+   */
+  generateVideoTransformation: (publicId, presetKey = 'web_optimized') => {
+    if (!publicId) {
+      throw new Error('publicId is required for video transformation');
+    }
+
+    const key = String(presetKey || 'web_optimized').toLowerCase();
+    const preset = cloudinaryService.VIDEO_PRESETS[key];
+    if (!preset) {
+      throw new Error(
+        `Invalid video preset "${presetKey}". Allowed presets: ${Object.keys(
+          cloudinaryService.VIDEO_PRESETS
+        ).join(', ')}`
+      );
+    }
+
+    const url = cloudinary.url(publicId, {
+      resource_type: 'video',
+      transformation: preset.transformation,
+      secure: true,
+    });
+
+    return {
+      preset: key,
+      presetInfo: preset,
+      url,
+      format: 'auto',
+    };
+  },
+
+  /**
+   * Phase 12: Generates a Cloudinary video frame thumbnail / poster URL
+   *
+   * @param {string} publicId - Cloudinary video asset public ID
+   * @param {Object} [options={}] - Options like width, crop
+   * @returns {string} Cloudinary image URL for video poster frame
+   */
+  getVideoThumbnail: (publicId, options = {}) => {
+    if (!publicId) return '';
+    const width = options.width || 600;
+    return cloudinary.url(publicId, {
+      resource_type: 'video',
+      format: 'jpg',
+      transformation: [
+        { crop: options.crop || 'limit', width, start_offset: options.start_offset || '0' },
+        { quality: 'auto' },
+      ],
+      secure: true,
+    });
   },
 };
 

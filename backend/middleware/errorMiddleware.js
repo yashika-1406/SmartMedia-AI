@@ -22,7 +22,7 @@ const errorHandler = (err, req, res, next) => {
   if (err.name === 'MulterError') {
     statusCode = 400;
     if (err.code === 'LIMIT_FILE_SIZE') {
-      err.message = 'File size limit exceeded (maximum 15MB allowed).';
+      err.message = 'File size limit exceeded (maximum 100MB for video, 15MB for image).';
     } else if (err.code === 'LIMIT_UNEXPECTED_FILE') {
       err.message = 'Unexpected field name. Please upload the file with the field name "file".';
     }

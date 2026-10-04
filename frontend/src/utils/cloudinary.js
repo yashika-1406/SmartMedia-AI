@@ -84,3 +84,45 @@ export function getOptimizedSrcSet(media, widths = [400, 800, 1200]) {
     .map((w) => `${getOptimizedUrl(media, { width: w })} ${w}w`)
     .join(', ');
 }
+
+/**
+ * Phase 12: Generates a Cloudinary video poster/thumbnail image URL
+ * Delivers an optimized representative frame from the video asset as an image
+ *
+ * @param {Object|string} media - Media document or video secureUrl
+ * @param {Object} [options]
+ * @param {number} [options.width=600] - Delivery width
+ * @param {string} [options.crop='limit'] - Resize crop mode
+ * @returns {string} Thumbnail image URL
+ */
+export function getVideoThumbnailUrl(media, options = {}) {
+  const rawUrl = typeof media === 'string' ? media : media?.secureUrl || media?.url || '';
+
+  if (!rawUrl || typeof rawUrl !== 'string') {
+    return '';
+  }
+
+  const uploadIndex = rawUrl.indexOf('/upload/');
+  if (uploadIndex === -1) {
+    return rawUrl;
+  }
+
+  const { width = 600, crop = 'limit', startOffset = '0' } = options;
+
+  // Ensure Cloudinary video resource type is used
+  let prefix = rawUrl.slice(0, uploadIndex + 8);
+  if (prefix.includes('/image/upload/')) {
+    prefix = prefix.replace('/image/upload/', '/video/upload/');
+  }
+
+  const rest = rawUrl.slice(uploadIndex + 8);
+  const cleanRest = rest.split('?')[0];
+
+  // Replace existing video extension with .jpg or append .jpg to extract representative frame as image
+  const restWithJpg = /\.[a-zA-Z0-9]+$/.test(cleanRest)
+    ? cleanRest.replace(/\.[a-zA-Z0-9]+$/, '.jpg')
+    : `${cleanRest}.jpg`;
+
+  return `${prefix}so_${startOffset},c_${crop},w_${width}/f_auto/q_auto/${restWithJpg}`;
+}
+

@@ -45,12 +45,12 @@ api.interceptors.response.use(
 );
 
 /**
- * Upload a single image to the backend, which forwards to Cloudinary
+ * Upload a media asset (image or video) to the backend, which forwards to Cloudinary
  * @param {File} file - Selected browser File object
  * @param {Function} [onUploadProgress] - Optional callback receiving percent completed (0-100)
  * @returns {Promise<Object>} API response data containing Cloudinary asset metadata
  */
-export const uploadImage = async (file, onUploadProgress) => {
+export const uploadMedia = async (file, onUploadProgress) => {
   const formData = new FormData();
   formData.append('file', file);
 
@@ -70,6 +70,9 @@ export const uploadImage = async (file, onUploadProgress) => {
 
   return response.data;
 };
+
+// Backwards compatibility alias
+export const uploadImage = uploadMedia;
 
 /**
  * Fetch all media records from MongoDB Atlas
